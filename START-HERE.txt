@@ -1,0 +1,20 @@
+SMARTSHARING
+
+Full website source, original artwork, interactive marketplace demo, and research.
+
+This is a React/TypeScript web project, not a single HTML file.
+
+To run locally:
+1. Install Node.js 22.13 or newer and pnpm 11.25.0.
+2. Extract the ZIP and open a terminal in the SmartSharing folder.
+3. Run: pnpm install
+4. Run: pnpm dev
+5. Open the local address printed in the terminal.
+6. The research is available at /research.
+
+Internet is needed to install dependencies. Assets and research content are included.
+
+The marketplace is a concept demo. Payments, real asset delivery, and live
+Hedera settlement are not connected. Saved assets and drafts reset on refresh.
+
+Live site: https://smartsharing.samaltman007.chatgpt.site
