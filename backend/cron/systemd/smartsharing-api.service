@@ -1,0 +1,14 @@
+[Unit]
+Description=SmartSharing API (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/SmartSharing/backend
+ExecStart=/home/ubuntu/SmartSharing/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --proxy-headers --forwarded-allow-ips 127.0.0.1 --port 8000 --workers 2
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

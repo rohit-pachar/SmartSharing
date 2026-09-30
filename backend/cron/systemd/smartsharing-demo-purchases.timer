@@ -1,0 +1,11 @@
+[Unit]
+Description=Run SmartSharing demo-purchases on a schedule
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=7min
+RandomizedDelaySec=90
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
