@@ -1,0 +1,11 @@
+[Unit]
+Description=SmartSharing demo simulator — accept pending demo transfers
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/SmartSharing/backend
+ExecStart=/home/ubuntu/SmartSharing/backend/.venv/bin/python /home/ubuntu/SmartSharing/backend/cron/demo_accept.py
+TimeoutStartSec=10min

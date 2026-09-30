@@ -1,0 +1,11 @@
+[Unit]
+Description=SmartSharing demo simulator — peer-to-peer credit sends
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/SmartSharing/backend
+ExecStart=/home/ubuntu/SmartSharing/backend/.venv/bin/python /home/ubuntu/SmartSharing/backend/cron/demo_transfers.py
+TimeoutStartSec=10min
