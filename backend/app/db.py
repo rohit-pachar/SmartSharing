@@ -55,6 +55,15 @@ def ensure_indexes(d: Database | None = None) -> None:
     d.orders.create_index([("buyer_id", ASCENDING), ("asset_id", ASCENDING), ("license_id", ASCENDING)], unique=True)
     d.orders.create_index([("created_at", DESCENDING)])
     d.orders.create_index([("creator_id", ASCENDING), ("created_at", DESCENDING)])
+    d.orders.create_index([("asset_id", ASCENDING), ("license_key", ASCENDING)])
+    d.orders.create_index([("affiliate_id", ASCENDING), ("created_at", DESCENDING)])
+    d.discounts.create_index([("creator_id", ASCENDING), ("code", ASCENDING)], unique=True)
+    d.api_keys.create_index("hash", unique=True)
+    d.api_keys.create_index("user_id")
+    d.integrations.create_index([("user_id", ASCENDING), ("active", ASCENDING)])
+    d.integration_deliveries.create_index([("integration_id", ASCENDING), ("created_at", DESCENDING)])
+    d.asset_views.create_index([("asset_id", ASCENDING), ("day", ASCENDING)], unique=True)
+    d.asset_views.create_index([("creator_id", ASCENDING), ("day", ASCENDING)])
 
 
 def ensure_platform_account(d: Database | None = None) -> None:

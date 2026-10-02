@@ -68,7 +68,13 @@ def create_transfer(d: Database, from_user_id: str, to_user_id: str, amount: int
         d_.transfers.insert_one(t, session=s)
         return t
 
-    return run_txn(_fn, d)
+    out = run_txn(_fn, d)
+    if not is_demo:
+        from ..util import public_name
+        from .hooks import emit
+        emit(d, to_user_id, "transfer.received", {"transfer_id": out["_id"], "amount": amount, "memo": out["memo"],
+                                                   "from": public_name(sender["full_name"]), "from_handle": sender["handle"]})
+    return out
 
 
 def _settle(d: Database, transfer_id: str, *, match: dict, new_status: str, at: datetime | None) -> dict:

@@ -1,4 +1,18 @@
 import type { Metadata } from 'next';
 import './globals.css';
-export const metadata:Metadata={metadataBase:new URL('https://smartsharing.samaltman007.chatgpt.site'),title:'SmartSharing | The creator-to-creator exchange',description:'Explore a new way to license creative assets and tested AI workflows directly from creators. A researched marketplace concept for smartsharing.in.',icons:{icon:'/favicon.svg',shortcut:'/favicon.svg'},openGraph:{type:'website',siteName:'SmartSharing',title:'SmartSharing | The creator-to-creator exchange',description:'License creative assets and tested AI workflows directly from creators. An interactive marketplace concept — no live transactions.',images:[{url:'/art/prism.webp',width:1536,height:1024,alt:'Ice-blue glass and chrome interlocking forms'}]},twitter:{card:'summary_large_image',title:'SmartSharing | The creator-to-creator exchange',description:'License creative assets and tested AI workflows directly from creators. An interactive marketplace concept.',images:['/art/prism.webp']}};
-export default function RootLayout({children}:Readonly<{children:React.ReactNode}>){return <html lang="en"><body>{children}</body></html>}
+import './app.css';
+import { AuthProvider } from './lib/auth';
+
+const desc = 'Templates, LUTs, invoice kits and AI workflows for creators — instant download. Open your own storefront with discount codes, licence keys, analytics and integrations built in.';
+export const metadata: Metadata = {
+  metadataBase: new URL('https://smartsharing.in'),
+  title: 'SmartSharing · Tools and assets for creators',
+  description: desc,
+  icons: { icon: '/favicon.svg', shortcut: '/favicon.svg' },
+  openGraph: { type: 'website', siteName: 'SmartSharing', title: 'SmartSharing · Tools and assets for creators', description: desc, images: [{ url: '/art/prism.webp', width: 1536, height: 1024 }] },
+  twitter: { card: 'summary_large_image', title: 'SmartSharing', description: desc, images: ['/art/prism.webp'] },
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <html lang="en"><body><AuthProvider>{children}</AuthProvider></body></html>;
+}
