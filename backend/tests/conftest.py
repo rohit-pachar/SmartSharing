@@ -2,6 +2,8 @@ import os
 
 os.environ["MONGO_DB"] = "smartsharing_test"
 os.environ["ADMIN_TOKEN"] = "test-admin"
+os.environ["SIGNUP_BONUS_CREDITS"] = "0"
+os.environ.setdefault("SS_STORAGE_DIR", "/home/ubuntu/.hermes/cache/scratch/ss_test_storage")
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

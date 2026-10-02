@@ -71,6 +71,9 @@ def test_full_flow(client, d):
     assert r.status_code == 201, r.text
     aid = r.json()["id"]
     assert [o["id"] for o in r.json()["license_options"]] == ["personal", "commercial", "studio"]
+    import io
+    client.post(f"/api/studio/assets/{aid}/files", headers=H(b), files={"file": ("luts.zip", io.BytesIO(b"PK"), "application/zip")})
+    assert client.patch(f"/api/studio/assets/{aid}", headers=H(b), json={"status": "published"}).status_code == 200
     r = client.post("/api/orders", json={"asset_id": aid, "license_id": "commercial"}, headers=H(a))
     assert r.status_code == 201, r.text
     o = r.json()

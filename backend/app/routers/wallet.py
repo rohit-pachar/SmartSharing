@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..db import get_db
-from ..security import current_user
+from ..security import session_user as current_user
 from ..services import transfers as tsvc
 from ..util import clean
 

@@ -1,113 +1,95 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { flushSync } from 'react-dom';
-import { ArrowUpRight, Search, Plus, Box, Workflow, Film, Bookmark, ArrowRight, Link2, Check, FileText, X, CheckCircle2, LayoutGrid, PackageOpen, Sparkles, LogIn, LogOut, Wallet as WalletIcon, Send, ArrowDownLeft, Activity as ActivityIcon } from 'lucide-react';
-import { Dialog,DialogContent,DialogTitle,DialogDescription } from '@/components/ui/dialog';
-import { Sheet,SheetContent,SheetTitle,SheetDescription } from '@/components/ui/sheet';
-import { Tabs,TabsList,TabsTrigger,TabsContent } from '@/components/ui/tabs';
-import { RadioGroup,RadioGroupItem } from '@/components/ui/radio-group';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select,SelectTrigger,SelectValue,SelectContent,SelectItem } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import Orbit from './orbit';
-import { assets as fallbackAssets,categories,money,licenseOptions,timeAgo,type Asset } from './market-data';
-import { api,token,ApiError,type User,type Wallet,type Order,type Activity,type Stats,type Transfer,type LedgerRow } from './api';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { ArrowRight, Search, Sparkles, Zap, KeyRound, Webhook, BadgePercent, BarChart3, Download } from 'lucide-react';
+import { api, type Profile } from './lib/api';
+import { CATEGORIES, type Asset } from './lib/market';
+import { AssetCard, Footer, Header, Empty } from './ui';
+import { mediaUrl } from './lib/api';
 
-const LEDGER_LABEL:Record<string,string>={grant:'Opening balance',admin_grant:'Top-up',purchase:'Purchase',sale:'Sale',transfer_in:'Received',transfer_out_pending:'Sent (awaiting accept)',transfer_out_settled:'Transfer accepted',transfer_rejected_refund:'Declined · refunded',transfer_cancelled_refund:'Cancelled · refunded',transfer_expired_refund:'Expired · refunded'};
-const errMsg=(e:unknown)=>e instanceof ApiError?e.message:'Could not reach SmartSharing. Please try again.';
+const TOOLS = [
+  { icon: <Download size={18} />, t: 'Instant delivery', d: 'Buyers download from their library the second they pay.' },
+  { icon: <KeyRound size={18} />, t: 'Licence keys', d: 'Every sale gets a key your software can verify via API.' },
+  { icon: <BadgePercent size={18} />, t: 'Discounts & affiliates', d: 'Launch codes, limited-use promos and referral commissions.' },
+  { icon: <Webhook size={18} />, t: 'Integrations', d: 'Sale alerts to Discord, Slack, Telegram, Zapier, Make, n8n.' },
+  { icon: <BarChart3 size={18} />, t: 'Analytics', d: 'Views, conversion and which link sent each sale.' },
+  { icon: <Zap size={18} />, t: 'Creator API', d: 'Manage listings and read sales with your own API keys.' },
+];
 
-export default function Home(){
- const [category,setCategory]=useState('All assets');const [query,setQuery]=useState('');
- const [catalog,setCatalog]=useState<Asset[]>(fallbackAssets);const [total,setTotal]=useState(fallbackAssets.length);const [live,setLive]=useState(false);
- const [stats,setStats]=useState<Stats|null>(null);const [feed,setFeed]=useState<Activity[]>([]);
- const [user,setUser]=useState<User|null>(null);const [wallet,setWallet]=useState<Wallet|null>(null);
- const [login,setLogin]=useState(false);const [authMode,setAuthMode]=useState<'login'|'register'>('login');const [authErr,setAuthErr]=useState('');const [authBusy,setAuthBusy]=useState(false);
- const [saved,setSaved]=useState<string[]>([]);const [asset,setAsset]=useState<Asset|null>(null);const [option,setOption]=useState('personal');const [accepted,setAccepted]=useState(false);
- const [receipt,setReceipt]=useState<Order|null>(null);const [buyErr,setBuyErr]=useState('');const [buying,setBuying]=useState(false);
- const [purchases,setPurchases]=useState<Order[]>([]);const [mine,setMine]=useState<Asset[]>([]);
- const [collection,setCollection]=useState(false);const [listing,setListing]=useState(false);const [draftCategory,setDraftCategory]=useState('3D & design');const [rights,setRights]=useState(false);const [draftCreated,setDraftCreated]=useState(false);const [listErr,setListErr]=useState('');
- const [walletOpen,setWalletOpen]=useState(false);const [incoming,setIncoming]=useState<Transfer[]>([]);const [ledger,setLedger]=useState<LedgerRow[]>([]);const [sendMsg,setSendMsg]=useState('');const [sending,setSending]=useState(false);
+function Market() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const [q, setQ] = useState(params.get('q') || '');
+  const [cat, setCat] = useState('All');
+  const [source, setSource] = useState(params.get('source') || '');
+  const [sort, setSort] = useState('popular');
+  const [items, setItems] = useState<Asset[] | null>(null);
+  const [official, setOfficial] = useState<Asset[]>([]);
+  const [studio, setStudio] = useState<Profile | null>(null);
+  const priceFree = params.get('price') === 'free';
 
- const loadCatalog=useCallback(async(q:string,c:string)=>{try{const r=await api.assets({q,category:c,sort:'popular',limit:48});setCatalog(r.items);setTotal(r.total);setLive(true)}catch{setLive(false);const f=fallbackAssets.filter(a=>(c==='All assets'||a.category===c)&&`${a.name} ${a.category} ${a.creator} ${a.description}`.toLowerCase().includes(q.toLowerCase().trim()));setCatalog(f);setTotal(f.length)}},[]);
- const loadPulse=useCallback(async()=>{try{const [s,a]=await Promise.all([api.stats(),api.activity(10)]);setStats(s);setFeed(a.items)}catch{}},[]);
- const loadMe=useCallback(async()=>{if(!token.get()){setUser(null);setWallet(null);return}try{const [u,w]=await Promise.all([api.me(),api.wallet()]);setUser(u);setWallet(w)}catch{setUser(null);setWallet(null)}},[]);
- const loadWalletDetail=useCallback(async()=>{if(!token.get())return;try{const [w,t,l]=await Promise.all([api.wallet(),api.transfers('in','pending'),api.ledger()]);setWallet(w);setIncoming(t.items);setLedger(l.items)}catch{}},[]);
- const loadCollection=useCallback(async()=>{if(!token.get())return;try{const [p,m]=await Promise.all([api.purchases(),api.myAssets()]);setPurchases(p.items);setMine(m.items)}catch{}},[]);
+  useEffect(() => { api.assets({ source: 'official', sort: 'popular', limit: 12 }).then(r => setOfficial(r.items)).catch(() => {}); api.profile('smartsharing.studio').then(setStudio).catch(() => {}) }, []);
+  useEffect(() => { setQ(params.get('q') || ''); setSource(params.get('source') || '') }, [params]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      api.assets({ q, category: cat === 'All' ? '' : cat, sort, source, limit: 60 })
+        .then(r => setItems(priceFree ? r.items.filter(a => a.price === 0) : r.items)).catch(() => setItems([]));
+    }, q ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [q, cat, sort, source, priceFree]);
 
- useEffect(()=>{const t=setTimeout(()=>loadCatalog(query,category),query?250:0);return()=>clearTimeout(t)},[query,category,loadCatalog]);
- useEffect(()=>{loadPulse();loadMe();const i=setInterval(loadPulse,20000);return()=>clearInterval(i)},[loadPulse,loadMe]);
- useEffect(()=>{if(walletOpen)loadWalletDetail()},[walletOpen,loadWalletDetail]);
- useEffect(()=>{if(collection||asset)loadCollection()},[collection,asset,loadCollection]);
+  const browsing = !!(q || cat !== 'All' || source || priceFree);
+  const free = official.filter(a => a.price === 0);
 
- const openAsset=(a:Asset)=>{setAsset(a);setOption(licenseOptions(a)[0].id);setAccepted(false);setReceipt(null);setBuyErr('')};
- const toggleSaved=(id:string)=>setSaved(s=>s.includes(id)?s.filter(v=>v!==id):[...s,id]);
- const selection=asset?licenseOptions(asset).find(x=>x.id===option)??licenseOptions(asset)[0]:null;
- const owned=(a:Asset,lic:string)=>purchases.some(p=>p.asset_id===a.id&&p.license_name===lic);
+  return (
+    <>
+      <Header active="discover" />
+      <main className="page">
+        {!browsing && <section className="home-hero">
+          <div className="home-hero-copy">
+            <p className="eyebrow">THE CREATOR-TO-CREATOR EXCHANGE</p>
+            <h1>Tools and assets<br />that <span>ship your work.</span></h1>
+            <p className="lead">LUTs, templates, invoice kits and AI workflows made for Indian creators — downloadable the moment you buy. Or open your own storefront in two minutes.</p>
+            <form className="hero-search" onSubmit={e => { e.preventDefault(); router.push(`/?q=${encodeURIComponent(q)}`) }}><Search size={18} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Try “LUT”, “GST invoice”, “Diwali”" aria-label="Search" /><button className="btn btn-primary">Search</button></form>
+            <div className="hero-links"><span className="muted">Popular:</span>{['LUT', 'GST invoice', 'Diwali', 'Carousel'].map(t => <Link key={t} className="chip" href={`/?q=${encodeURIComponent(t)}`}>{t}</Link>)}</div>
+          </div>
+          <div className="home-hero-art">{official.slice(0, 5).map((a, i) => <Link key={a.id} href={`/p/${a.id}`} className={`collage c${i}`}><img src={mediaUrl(a.image)} alt={a.name} /><span>{a.name}<b>{a.price === 0 ? 'Free' : `${a.price} cr`}</b></span></Link>)}</div>
+        </section>}
 
- const buy=async()=>{if(!asset||!selection||!accepted)return;if(!user){setAuthMode('login');setAuthErr('');setLogin(true);return}setBuying(true);setBuyErr('');try{const o=await api.buy(asset.id,selection.id);setReceipt(o);setPurchases(p=>[o,...p]);loadMe();loadPulse()}catch(e){setBuyErr(errMsg(e))}finally{setBuying(false)}};
- const submitAuth=async(e:React.FormEvent<HTMLFormElement>)=>{e.preventDefault();const f=new FormData(e.currentTarget);setAuthBusy(true);setAuthErr('');try{const email=String(f.get('email')),pw=String(f.get('password'));const r=authMode==='login'?await api.login(email,pw):await api.register(String(f.get('name')),email,pw);token.set(r.access_token);setLogin(false);await loadMe()}catch(err){setAuthErr(errMsg(err))}finally{setAuthBusy(false)}};
- const logout=()=>{token.clear();setUser(null);setWallet(null);setPurchases([]);setMine([])};
- const sendCredits=async(e:React.FormEvent<HTMLFormElement>)=>{e.preventDefault();const form=e.currentTarget;const f=new FormData(form);setSending(true);setSendMsg('');try{const t=await api.send(String(f.get('to')).trim(),Number(f.get('amount')),String(f.get('memo')||'')||undefined);setSendMsg(`Sent ${money(t.amount)}. It lands in their wallet once they accept.`);form.reset();loadWalletDetail()}catch(err){setSendMsg(errMsg(err))}finally{setSending(false)}};
- const actOn=async(t:Transfer,accept:boolean)=>{try{await (accept?api.acceptTransfer(t.id):api.rejectTransfer(t.id));loadWalletDetail()}catch{}};
- const openLogin=(mode:'login'|'register')=>{setAuthMode(mode);setAuthErr('');setLogin(true)};
+        {!browsing && official.length > 0 && <section className="shelf">
+          <div className="shelf-head"><div><p className="eyebrow">MADE BY SMARTSHARING STUDIO</p><h2>Start with the essentials</h2></div><Link href="/?source=official" className="link">See all {studio ? studio.assets.length : ''} <ArrowRight size={14} /></Link></div>
+          <div className="grid">{official.filter(a => a.price > 0).slice(0, 8).map(a => <AssetCard key={a.id} a={a} />)}</div>
+        </section>}
 
- useEffect(()=>{
-  const context=(document as unknown as {modelContext?:{registerTool:(tool:Record<string,unknown>,options:{signal:AbortSignal})=>unknown}}).modelContext;if(!context?.registerTool)return;const life=new AbortController();
-  const register=(tool:Record<string,unknown>)=>{try{Promise.resolve(context.registerTool(tool,{signal:life.signal})).catch(()=>{})}catch{}};
-  register({name:'search_smartsharing_assets',title:'Search SmartSharing assets',description:'Filter the visible marketplace catalogue.',inputSchema:{type:'object',properties:{query:{type:'string'},category:{type:'string',enum:categories}},additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute:async(input:unknown)=>{if(!input||typeof input!=='object')throw Error('Expected an object');const v=input as Record<string,unknown>;if(v.query!==undefined&&typeof v.query!=='string')throw Error('query must be text');if(v.category!==undefined&&!categories.includes(v.category as string))throw Error('Invalid category');const q=(v.query as string)||'',c=(v.category as string)||'All assets';flushSync(()=>{setQuery(q);setCategory(c)});document.getElementById('explore')?.scrollIntoView();const r=await api.assets({q,category:c,limit:24}).catch(()=>({items:fallbackAssets}));return{assets:r.items.map(a=>({id:a.id,name:a.name,startingPriceCredits:a.price}))}}});
-  register({name:'open_smartsharing_asset',title:'Preview an asset',description:'Open an asset detail and licence selector. Does not purchase anything.',inputSchema:{type:'object',properties:{assetId:{type:'string'}},required:['assetId'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute:async(input:unknown)=>{const id=(input as {assetId?:unknown})?.assetId;if(typeof id!=='string')throw Error('assetId required');const r=await api.assets({limit:100}).catch(()=>({items:fallbackAssets}));const a=r.items.find(x=>x.id===id);if(!a)throw Error('Unknown asset ID');flushSync(()=>openAsset(a));return{opened:a.id,purchased:false}}});
-  return()=>life.abort();
- },[]);
+        {!browsing && free.length > 0 && <section className="shelf free-shelf">
+          <div className="shelf-head"><div><p className="eyebrow">FREE</p><h2>Free for every creator</h2></div></div>
+          <div className="grid grid-2">{free.map(a => <AssetCard key={a.id} a={a} />)}</div>
+        </section>}
 
- const spotlight=catalog.find(a=>a.id==='prism')??catalog[0];
- return <>
- <header className="site-header"><Link href="/" className="brand" aria-label="SmartSharing home"><Link2/>smartsharing<span>.in</span></Link><nav aria-label="Main navigation"><Link className="active" href="/">Discover</Link><a href="#how-it-works">How it works</a><Link href="/research">The research <ArrowUpRight size={14}/></Link></nav>
-  <button className="button quiet" onClick={()=>setCollection(true)} aria-label="Open my collection"><Bookmark size={17}/> My collection{saved.length+purchases.length>0&&<span className="count">{saved.length+purchases.length}</span>}</button>
-  {user?<><button className="button quiet wallet-pill" onClick={()=>setWalletOpen(true)} aria-label="Open wallet"><WalletIcon size={17}/> {wallet?money(wallet.balance):'Wallet'}</button><button className="button quiet icon-only" onClick={logout} aria-label="Log out" title={`Log out ${user.full_name}`}><LogOut size={17}/></button></>
-   :<button className="button quiet" onClick={()=>openLogin('login')}><LogIn size={17}/> Log in</button>}
-  <button className="button primary" onClick={()=>{if(!user){openLogin('register');return}setListing(true);setDraftCreated(false);setListErr('')}}><Plus size={17}/> List an asset</button></header>
- <main className="market">
- <section className="hero"><div className="hero-copy"><p className="eyebrow">THE CREATOR-TO-CREATOR EXCHANGE</p><h1>Great work.<br/>Made to <span>go further.</span></h1><p>Discover digital assets and AI workflows.<br/>License directly from the people who make them.</p><a className="button primary" href="#explore">Find your next asset <ArrowUpRight size={18}/></a><Link className="hero-secondary" href="/research">Explore the idea <ArrowRight size={15}/></Link></div><div className="hero-object"><Orbit/>{spotlight&&<button className="featured-label" onClick={()=>openAsset(spotlight)}><span className="featured-square"><Box size={18}/></span><span><small>IN THE SPOTLIGHT</small><strong>{spotlight.name}</strong></span><ArrowUpRight size={18}/></button>}</div><div className="hero-bottom"><span>{stats?`${stats.members} members · ${stats.creators} creators · ${stats.assets} assets`:'Created by people. Shared with purpose.'}</span><span>{stats?`${stats.orders.toLocaleString('en-IN')} licences issued`:<>Clear licenses <b>•</b> Creator-first economics</>}</span></div></section>
+        {!browsing && <section className="tools-band">
+          <div className="tools-intro"><p className="eyebrow">FOR CREATORS</p><h2>A storefront with the tools already plugged in.</h2><p className="muted">Everything you’d normally stitch together from five apps — in one studio you open every day.</p><Link href="/signup" className="btn btn-primary">Open your studio <ArrowRight size={16} /></Link></div>
+          <div className="tools-grid">{TOOLS.map(t => <div className="tool" key={t.t}><span className="tool-ic">{t.icon}</span><strong>{t.t}</strong><p>{t.d}</p></div>)}</div>
+        </section>}
 
- {feed.length>0&&<section className="pulse" aria-label="Recent marketplace activity"><span className="pulse-title"><ActivityIcon size={14}/> LIVE ACTIVITY</span><div className="pulse-track">{feed.map((f,i)=><span className="pulse-item" key={i}>{f.type==='purchase'?<><b>{f.buyer}</b> licensed <b>{f.asset}</b> · {f.license}</>:<><b>{f.from}</b> sent {money(f.amount??0)} to <b>{f.to}</b></>}<small>{timeAgo(f.at)}{f.is_demo?' · demo':''}</small></span>)}</div></section>}
-
- <section id="explore" aria-labelledby="explore-title"><div className="section-heading"><h2 id="explore-title">Find your next building block<span>.</span></h2><span>THE COLLECTION / {String(total).padStart(3,'0')}</span></div><div className="market-tools"><div className="categories" aria-label="Filter by category">{categories.map((x,i)=>{const Icon=[LayoutGrid,Box,Workflow,Film][i];return <button key={x} aria-pressed={category===x} className={category===x?'selected':''} onClick={()=>setCategory(x)}><Icon size={15}/>{x}</button>})}</div><div className="search-field"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search assets or creators" aria-label="Search assets or creators"/>{query&&<button aria-label="Clear search" onClick={()=>setQuery('')}><X size={15}/></button>}</div></div>
- <div className="catalog-meta"><span aria-live="polite">{total} {total===1?'asset':'assets'} to explore</span>{!live&&<span className="concept-badge">OFFLINE PREVIEW</span>}</div>
- <div className="asset-grid">{catalog.map(a=><article className="asset-card" key={a.id}><div className="asset-art"><button className="art-button" onClick={()=>openAsset(a)} aria-label={'Explore '+a.name}><img src={a.image} alt="" width={768} height={512} loading="lazy"/><span className="art-edit">{a.tag}</span><span className="art-open"><ArrowUpRight size={22}/></span></button><button className={'save-asset '+(saved.includes(a.id)?'is-saved':'')} onClick={()=>toggleSaved(a.id)} aria-label={(saved.includes(a.id)?'Unsave ':'Save ')+a.name} aria-pressed={saved.includes(a.id)}><Bookmark size={17} fill={saved.includes(a.id)?'currentColor':'none'}/></button>{a.is_demo&&<span className="demo-tag">DEMO</span>}</div><div className="asset-info"><div className="asset-type"><p className="asset-category">{a.category}</p><span>{a.kind==='hosted'?'ACCESS PASS':'LICENSE'}</span></div><h3><button onClick={()=>openAsset(a)}>{a.name}</button></h3><div className="creator-line"><span className={'avatar avatar-'+a.id}>{a.initials}</span><span>{a.creator}<small>{a.role}</small></span></div><div className="asset-bottom"><span><small>From </small>{money(a.price)}<small>{a.kind==='hosted'?' / 7 days':''}</small></span>{!!a.stats?.sales&&<span className="sales-count">{a.stats.sales} sold</span>}<button onClick={()=>openAsset(a)} aria-label={'View '+a.name}><ArrowUpRight size={20}/></button></div><p className="format-label">{a.format}</p></div></article>)}</div>
- {catalog.length===0&&<div className="empty-state"><Search size={32}/><h3>No assets found</h3><p>Try a different name or explore the full collection.</p><button className="button quiet" onClick={()=>{setQuery('');setCategory('All assets')}}>Reset filters</button></div>}
- <p className="demo-note">Early access: licences are paid in SmartSharing credits. Listings and activity marked DEMO come from our demo community while we onboard creators.</p></section>
- <section id="how-it-works" className="how-section"><div className="how-intro"><p className="eyebrow">LESS FRICTION. MORE CREATION.</p><h2>From their spark.<br/>To your next thing.</h2><p>A simple exchange, with the important details upfront.</p></div><div className="steps"><div><span>01</span><section><h3>Find something worth building on.</h3><p>Explore previews, file details, and what’s included.</p></section><Box size={19}/></div><div><span>02</span><section><h3>Choose the right permission.</h3><p>Personal or commercial licenses for files. Time-bound passes for hosted tools.</p></section><FileText size={19}/></div><div><span>03</span><section><h3>Make it part of your work.</h3><p>Creators keep 88% of every sale. You get the agreed usage rights and a clear receipt.</p></section><Sparkles size={19}/></div></div></section>
- <section className="research-callout"><div><span className="research-icon"><Link2 size={30}/></span><div><p className="eyebrow">THE THINKING BEHIND SMARTSHARING</p><h2>A marketplace with a point of view.</h2><p>Four concepts. Real trade-offs. A practical role for Hedera.</p></div></div><Link href="/research" className="button quiet">Read the research <ArrowUpRight size={18}/></Link></section>
- <footer className="site-footer"><Link className="brand" href="/"><Link2/>smartsharing<span>.in</span></Link><span>Made to be shared.</span><a href="mailto:hello@smartsharing.in">hello@smartsharing.in</a><Link href="/research#sources">Sources & references <ArrowUpRight size={13}/></Link><span className="footer-note">Early access · Credits only · No card payments yet</span></footer>
- </main>
-
- <Sheet open={!!asset} onOpenChange={o=>{if(!o)setAsset(null)}}><SheetContent className="asset-sheet" aria-describedby="asset-description">{asset&&<><div className="sheet-image"><img src={asset.image} alt={asset.name}/>{asset.is_demo&&<span className="concept-badge">DEMO LISTING</span>}</div><div className="sheet-body"><p className="asset-category">{asset.category}</p><SheetTitle className="sheet-heading">{asset.name}</SheetTitle><SheetDescription id="asset-description" className="sheet-description">{asset.description}</SheetDescription><div className="creator-line"><span className={'avatar avatar-'+asset.id}>{asset.initials}</span><span>{asset.creator}<small>{asset.role}{asset.stats?.sales?` · ${asset.stats.sales} sold`:''}</small></span></div>
- {!receipt?<><Tabs defaultValue="license" className="asset-tabs"><TabsList className="w-full"><TabsTrigger value="license">Choose a license</TabsTrigger><TabsTrigger value="included">What’s included</TabsTrigger></TabsList><TabsContent value="license"><RadioGroup value={option} onValueChange={setOption} className="license-options" aria-label="License options">{licenseOptions(asset).map(o=><label key={o.id} className={'license-option '+(option===o.id?'chosen':'')}><RadioGroupItem value={o.id}/><span><strong>{o.name}{owned(asset,o.name)&&' · owned'}</strong><small>{o.detail}</small></span><b>{money(o.price)}</b></label>)}</RadioGroup><p className="license-explainer">{asset.kind==='hosted'?'A hosted pass ends when its duration or run allowance is used up. Generated outputs remain with you, subject to the applicable model terms.':'Perpetual use under the chosen license. The creator retains ownership. Source files cannot be resold, redistributed, or sublicensed.'}</p></TabsContent><TabsContent value="included"><ul className="included-list">{asset.includes.map(x=><li key={x}><Check size={17}/>{x}</li>)}</ul></TabsContent></Tabs>
- <div className="checkout-breakdown"><div><span>License price</span><b>{money(selection?.price??0)}</b></div><div><span>Creator receives (88%)</span><span>{money(Math.round((selection?.price??0)*.88))}</span></div><div><span>Platform share (12%)</span><span>{money(Math.round((selection?.price??0)*.12))}</span></div>{user&&wallet&&<div><span>Your balance</span><span>{money(wallet.balance)}</span></div>}</div>
- <label className="accept-license"><Checkbox checked={accepted} onCheckedChange={v=>setAccepted(v===true)}/><span>I agree to the licence terms above. Credits are deducted from my wallet.</span></label>
- {buyErr&&<p className="form-error">{buyErr}</p>}
- <button className="button primary full" disabled={!accepted||buying||!live} onClick={buy}>{user?(buying?'Processing…':`Pay ${money(selection?.price??0)}`):'Log in to license'} <ArrowRight size={17}/></button><p className="demo-note">Paid in SmartSharing credits</p></>
- :<div className="receipt-success"><CheckCircle2 size={43}/><h3>Licence confirmed.</h3><p>{money(receipt.price)} paid from your wallet. {money(receipt.creator_amount)} went to {asset.creator}.</p><dl><div><dt>Receipt</dt><dd>{receipt.receipt}</dd></div><div><dt>Permission</dt><dd>{receipt.license_name}</dd></div><div><dt>Total</dt><dd>{money(receipt.price)}</dd></div><div><dt>New balance</dt><dd>{wallet?money(wallet.balance):'—'}</dd></div></dl><button className="button primary full" onClick={()=>{setAsset(null);setCollection(true)}}>View my collection <ArrowRight size={17}/></button></div>}
- </div></>}</SheetContent></Sheet>
-
- <Dialog open={login} onOpenChange={setLogin}><DialogContent className="login-dialog"><span className="login-icon"><LogIn size={26}/></span><DialogTitle className="dialog-heading">{authMode==='login'?'Welcome back.':'Join SmartSharing.'}</DialogTitle><DialogDescription>{authMode==='login'?'Log in to license assets, list your work and manage your credit wallet.':'Create an account to license assets and share your own work.'}</DialogDescription>
-  <form className="listing-form" onSubmit={submitAuth}>{authMode==='register'&&<label>Full name<Input name="name" required minLength={2} maxLength={80} autoComplete="name"/></label>}<label>Email<Input name="email" type="email" required autoComplete="email"/></label><label>Password<Input name="password" type="password" required minLength={8} autoComplete={authMode==='login'?'current-password':'new-password'}/></label>{authErr&&<p className="form-error">{authErr}</p>}<button className="button primary full" disabled={authBusy||!live} type="submit">{authBusy?'Please wait…':authMode==='login'?'Log in':'Create account'} <ArrowRight size={17}/></button></form>
-  <p className="login-contact">{authMode==='login'?<>New here? <a href="#" onClick={e=>{e.preventDefault();setAuthMode('register');setAuthErr('')}}>Create an account</a></>:<>Already have an account? <a href="#" onClick={e=>{e.preventDefault();setAuthMode('login');setAuthErr('')}}>Log in</a></>}</p></DialogContent></Dialog>
-
- <Dialog open={walletOpen} onOpenChange={setWalletOpen}><DialogContent className="collection-dialog"><DialogTitle className="dialog-heading">Your wallet</DialogTitle><DialogDescription>{user?.full_name} · @{user?.handle}</DialogDescription>
-  {wallet&&<div className="wallet-summary"><div><small>Available</small><strong>{money(wallet.balance)}</strong></div><div><small>Awaiting accept</small><strong>{money(wallet.pending_out)}</strong></div></div>}
-  <Tabs defaultValue="activity"><TabsList className="w-full"><TabsTrigger value="activity">Activity</TabsTrigger><TabsTrigger value="incoming">Incoming ({incoming.length})</TabsTrigger><TabsTrigger value="send">Send</TabsTrigger></TabsList>
-  <TabsContent value="activity">{!ledger.length?<div className="empty-state compact"><WalletIcon size={26}/><h3>No activity yet.</h3><p>License an asset or receive credits to get started.</p></div>:ledger.map(l=><div className="receipt-row" key={l.id}><span className="receipt-icon">{l.amount>=0?<ArrowDownLeft size={19}/>:<ArrowUpRight size={19}/>}</span><div><strong>{LEDGER_LABEL[l.kind]??l.kind}</strong><small>{l.memo??''}{l.memo?' · ':''}{timeAgo(l.created_at)}</small></div><b className={l.amount>=0?'amt-in':'amt-out'}>{l.amount>0?'+':''}{l.amount!==0?money(l.amount):'—'}</b></div>)}</TabsContent>
-  <TabsContent value="incoming">{!incoming.length?<div className="empty-state compact"><ArrowDownLeft size={26}/><h3>Nothing waiting.</h3><p>Credits sent to you appear here until you accept them.</p></div>:incoming.map(t=><div className="receipt-row" key={t.id}><span className="receipt-icon"><ArrowDownLeft size={19}/></span><div><strong>{money(t.amount)}</strong><small>{t.memo??'Credit transfer'} · {timeAgo(t.created_at)}</small></div><button className="button primary" onClick={()=>actOn(t,true)}>Accept</button><button className="button quiet" onClick={()=>actOn(t,false)}>Decline</button></div>)}</TabsContent>
-  <TabsContent value="send"><form className="listing-form" onSubmit={sendCredits}><label>Recipient handle<Input name="to" placeholder="e.g. priya.sharma" required/></label><label>Amount (credits)<Input name="amount" type="number" min={1} step={1} max={wallet?.balance??undefined} required/></label><label>Note (optional)<Input name="memo" maxLength={140}/></label>{sendMsg&&<p className="form-note">{sendMsg}</p>}<button className="button primary full" disabled={sending} type="submit">{sending?'Sending…':'Send credits'} <Send size={16}/></button></form></TabsContent></Tabs></DialogContent></Dialog>
-
- <Dialog open={collection} onOpenChange={setCollection}><DialogContent className="collection-dialog"><DialogTitle className="dialog-heading">Your collection</DialogTitle><DialogDescription>{user?'Saved assets, your licences and your listings.':'Log in to keep your licences and listings. Saved items last for this session.'}</DialogDescription><Tabs defaultValue="saved"><TabsList className="w-full"><TabsTrigger value="saved">Saved ({saved.length})</TabsTrigger><TabsTrigger value="receipts">Licences ({purchases.length})</TabsTrigger><TabsTrigger value="drafts">Listings ({mine.length})</TabsTrigger></TabsList>
-  <TabsContent value="saved">{!saved.length?<div className="empty-state compact"><Bookmark size={26}/><h3>A little inspiration goes a long way.</h3><p>Save an asset using the bookmark on its card.</p></div>:catalog.filter(x=>saved.includes(x.id)).map(a=><div className="collection-row" key={a.id}><img src={a.image} alt=""/><button onClick={()=>{setCollection(false);openAsset(a)}}><strong>{a.name}</strong><small>{a.category} · {money(a.price)}</small></button><button aria-label={'Remove '+a.name} onClick={()=>toggleSaved(a.id)}><X size={17}/></button></div>)}</TabsContent>
-  <TabsContent value="receipts">{!purchases.length?<div className="empty-state compact"><FileText size={26}/><h3>No licences yet.</h3><p>Open an asset and choose a licence.</p></div>:purchases.map(r=><div className="receipt-row" key={r.id}><span className="receipt-icon"><FileText size={21}/></span><div><strong>{r.asset_name}</strong><small>{r.license_name} · {money(r.price)} · {timeAgo(r.created_at)}</small><code>{r.receipt}</code></div><CheckCircle2 size={19}/></div>)}</TabsContent>
-  <TabsContent value="drafts">{!mine.length?<div className="empty-state compact"><PackageOpen size={28}/><h3>Have something to share?</h3><p>List your first asset.</p><button className="button quiet" onClick={()=>{setCollection(false);if(!user){openLogin('register');return}setListing(true);setDraftCreated(false)}}>List an asset <Plus size={16}/></button></div>:mine.map(d=><div className="draft-row" key={d.id}><strong>{d.name}</strong><small>{d.category} · {money(d.price)} · {d.stats?.sales??0} sold</small><p>{d.description}</p></div>)}</TabsContent></Tabs></DialogContent></Dialog>
-
- <Dialog open={listing} onOpenChange={setListing}><DialogContent className="listing-dialog"><DialogTitle className="dialog-heading">{draftCreated?'Your asset is live.':'Share something you made.'}</DialogTitle><DialogDescription>{draftCreated?'It now appears in the marketplace and under My collection → Listings.':'Publish a listing. File delivery and rights review are coming next.'}</DialogDescription>{draftCreated?<div className="draft-confirm"><CheckCircle2 size={40}/><p>You receive 88% of every licence sold, paid into your credit wallet.</p><button className="button primary full" onClick={()=>{setListing(false);setCollection(true)}}>View my collection <ArrowRight size={17}/></button></div>:<form className="listing-form" onSubmit={async e=>{e.preventDefault();if(!rights)return;const f=new FormData(e.currentTarget);const name=String(f.get('name')??'').trim(),description=String(f.get('description')??'').trim(),price=Number(f.get('price'));if(!name||!description||!Number.isFinite(price)||price<99||price>100000)return;setListErr('');try{await api.createAsset({name,description,price,category:draftCategory,kind:draftCategory==='AI workflows'?'hosted':'file'});setDraftCreated(true);setRights(false);loadCatalog(query,category)}catch(err){setListErr(errMsg(err))}}}><label>Asset name<Input name="name" placeholder="e.g. My cinematic motion pack" required minLength={3} maxLength={70}/></label><label>Category<Select value={draftCategory} onValueChange={setDraftCategory}><SelectTrigger className="w-full"><SelectValue/></SelectTrigger><SelectContent>{categories.slice(1).map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></label><label>What will someone be able to do with it?<Textarea name="description" placeholder="Describe what’s included and who it’s for." required minLength={10} maxLength={500}/></label><label>Starting price (credits)<Input name="price" type="number" min={99} max={100000} step={1} required defaultValue={499}/></label><label className="accept-license"><Checkbox checked={rights} onCheckedChange={v=>setRights(v===true)}/><span>I created this asset or have permission to license it.</span></label>{listErr&&<p className="form-error">{listErr}</p>}<button className="button primary full" type="submit" disabled={!rights}>Publish listing <Plus size={17}/></button></form>}</DialogContent></Dialog>
- </>
+        <section className="shelf" id="browse">
+          <div className="shelf-head"><div><p className="eyebrow">{browsing ? 'RESULTS' : 'BROWSE'}</p><h2>{q ? `“${q}”` : source === 'official' ? 'SmartSharing Studio originals' : priceFree ? 'Free resources' : 'All listings'}</h2></div>
+            <select className="select" value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort"><option value="popular">Most popular</option><option value="new">Newest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option></select></div>
+          <div className="chips">
+            {CATEGORIES.map(c => <button key={c} className={'chip' + (cat === c ? ' on' : '')} onClick={() => setCat(c)}>{c}</button>)}
+            <span className="chip-sep" />
+            <button className={'chip' + (source === 'official' ? ' on' : '')} onClick={() => setSource(s => s === 'official' ? '' : 'official')}><Sparkles size={13} />Studio originals</button>
+            <button className={'chip' + (source === 'community' ? ' on' : '')} onClick={() => setSource(s => s === 'community' ? '' : 'community')}>Community</button>
+            {browsing && <button className="chip chip-clear" onClick={() => { setQ(''); setCat('All'); setSource(''); router.push('/') }}>Clear</button>}
+          </div>
+          {items === null ? <div className="grid">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="card skel" />)}</div>
+            : items.length === 0 ? <Empty icon={<Search size={22} />} title="Nothing matches yet" text="Try another word or category — or be the first to list it." action={<Link href="/signup" className="btn btn-ghost">List an asset</Link>} />
+              : <div className="grid">{items.map(a => <AssetCard key={a.id} a={a} />)}</div>}
+        </section>
+      </main>
+      <Footer />
+    </>
+  );
 }
+
+export default function Home() { return <Suspense><Market /></Suspense> }
